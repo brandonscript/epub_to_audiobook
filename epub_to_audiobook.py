@@ -2,6 +2,7 @@ import os
 import re
 
 import io
+import sys
 import tempfile
 import wave
 from scipy.io.wavfile import write
@@ -66,13 +67,17 @@ def extract_chapters(epub_book: epub.EpubBook, newline_mode: str, remove_endnote
             else:
                 raise ValueError(f"Invalid newline mode: {newline_mode}")
 
+            # put a period and 4 spaces after every \n in cleaned.
+            cleaned_text = re.sub(r'[\n]', '.    ', cleaned_text)
             logger.debug(f"Cleaned text step 1: <{cleaned_text[:]}>")
+
             cleaned_text = re.sub(r'\s+', ' ', cleaned_text)
             logger.info(f"Cleaned text step 2: <{cleaned_text[:100]}>")
-            
-            #Removes endnote numbers
-            if remove_endnotes == True:
-                cleaned_text = re.sub(r'(?<=[a-zA-Z.,!?;”")])\d+', '', cleaned_text)
+
+            # Removes endnote numbers
+            if remove_endnotes:
+                cleaned_text = re.sub(
+                    r'(?<=[a-zA-Z.,!?;”")])\d+', '', cleaned_text)
                 logger.info(f"Cleaned text step 4: <{cleaned_text[:100]}>")
 
             # fill in the title if it's missing
@@ -86,6 +91,8 @@ def extract_chapters(epub_book: epub.EpubBook, newline_mode: str, remove_endnote
             soup.decompose()
 
     return chapters
+
+
 
 
 def is_special_char(char: str) -> bool:
@@ -114,14 +121,29 @@ def split_text(text: str, max_chars: int) -> List[str]:
     if current_chunk:
         chunks.append(current_chunk)
 
-    logger.info(f"Split text into {len(chunks)} chunks")
-    for i, chunk in enumerate(chunks, 1):
+    # Check for extra whitespace and add additional chunks
+    temp_chunks = []
+    for chunk in chunks:
+        temp_chunk = ""
+        words = chunk.split()
+        for word in words:
+            if len(temp_chunk) + len(word) + 1 <= max_chars:
+                temp_chunk += (" " if temp_chunk else "") + word
+            else:
+                temp_chunks.append(temp_chunk)
+                temp_chunk = word
+        if temp_chunk:
+            temp_chunks.append(temp_chunk)
+
+    logger.info(f"Split text into {len(temp_chunks)} chunk(s)")
+    for i, chunk in enumerate(temp_chunks, 1):
         first_100 = chunk[:100]
         last_100 = chunk[-100:] if len(chunk) > 100 else ""
         logger.info(
             f"Chunk {i}: Length={len(chunk)}, Start={first_100}..., End={last_100}")
 
-    return chunks
+    return temp_chunks
+
 
 
 def convert_wav_to_mp3(wav_path, mp3_path):
@@ -165,7 +187,7 @@ def text_to_speech(session: requests.Session, text: str, output_file: str, tts_m
 
     text_chunks = split_text(text, max_chars)
 
-    audio_segments = []
+    temp_files = []  # List to store temporary part files
 
     for i, chunk in enumerate(text_chunks, 1):
         logger.debug(
@@ -178,15 +200,27 @@ def text_to_speech(session: requests.Session, text: str, output_file: str, tts_m
         logger.info(
             f"Processing chapter-{idx} <{title}>, chunk {i} of {len(text_chunks)}")
 
-        audio_segments.append(io.BytesIO(tts_to_bytes_io(escaped_text)))
+        audio_data = tts_to_bytes_io(escaped_text)
+
+        # Create a temporary part file in the same output folder
+        part_file_name = f"part{i}_{os.path.basename(output_file)}"
+        part_file_path = os.path.join(
+            os.path.dirname(output_file), part_file_name)
+
+        # Write audio data to the temporary part file
+        with open(part_file_path, 'wb') as f:
+            f.write(audio_data)
+
+        temp_files.append(part_file_path)
 
         if sample:
             break
 
+    # Merge all part files into a single chapter file
     with open(output_file, "wb") as outfile:
-        for segment in audio_segments:
-            segment.seek(0)
-            outfile.write(segment.read())
+        for temp_file_path in temp_files:
+            with open(temp_file_path, 'rb') as f:
+                outfile.write(f.read())
 
     # Add ID3 tags to the generated MP3 file
     audio = MP3(output_file)
@@ -195,6 +229,11 @@ def text_to_speech(session: requests.Session, text: str, output_file: str, tts_m
     audio["TALB"] = TALB(encoding=3, text=book_title)
     audio["TRCK"] = TRCK(encoding=3, text=str(idx))
     audio.save()
+
+    # Clean up temporary part files
+    for temp_file_path in temp_files:
+        os.remove(temp_file_path)
+
 
 
 def epub_to_audiobook(input_file: str, output_folder: str, tts_model: str, preview: bool, newline_mode: str, break_duration: int, chapter_start: int, chapter_end: int, output_format: str, remove_endnotes: bool, output_text: bool, sample: bool = False) -> None:
@@ -288,8 +327,6 @@ def main():
     args = parser.parse_args()
 
     logger.setLevel(args.log)
-
-    tts = TTS(args.model).to(device)
 
     epub_to_audiobook(args.input_file, args.output_folder,
                       args.model, args.preview, args.newline_mode, args.break_duration, args.chapter_start, args.chapter_end, args.output_format, args.remove_endnotes, args.output_text, args.sample)
