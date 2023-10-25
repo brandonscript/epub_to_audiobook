@@ -1,0 +1,35 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../TTS"
+		}
+	],
+	"settings": {
+
+		// make default python formatter and linter mypy
+		"workbench.colorCustomizations": {
+			"activityBar.activeBackground": "#fde1a4",
+			"activityBar.background": "#fde1a4",
+			"activityBar.foreground": "#15202b",
+			"activityBar.inactiveForeground": "#15202b99",
+			"activityBarBadge.background": "#039c6c",
+			"activityBarBadge.foreground": "#e7e7e7",
+			"commandCenter.border": "#15202b99",
+			"sash.hoverBorder": "#fde1a4",
+			"statusBar.background": "#fcd172",
+			"statusBar.foreground": "#15202b",
+			"statusBarItem.hoverBackground": "#fbc140",
+			"statusBarItem.remoteBackground": "#fcd172",
+			"statusBarItem.remoteForeground": "#15202b",
+			"titleBar.activeBackground": "#fcd172",
+			"titleBar.activeForeground": "#15202b",
+			"titleBar.inactiveBackground": "#fcd17299",
+			"titleBar.inactiveForeground": "#15202b99",
+		},
+		"peacock.color": "#fcd172"
+		
+	}
+}

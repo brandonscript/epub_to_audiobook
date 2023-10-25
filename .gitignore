@@ -22,3 +22,5 @@ Thumbs.db
 
 # audio files
 audiobook_output/
+**/*.mp3
+**/*.wav
